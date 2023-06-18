@@ -11,9 +11,17 @@ import {IERC20} from "@aave/core-v3/contracts/dependencies/openzeppelin/contract
 // This method is gas efficient for those trying take advantage of simple flash loan with single reserve asset.
 
 contract SimpleFlashLoan is FlashLoanSimpleReceiverBase {
-    address payable owner;
 
-    constructor(address _addressProvider) FlashLoanSimpleReceiverBase(IPoolAddressesProvider(_addressProvider)) {}
+    address payable public owner;
+
+    constructor(address _addressProvider) FlashLoanSimpleReceiverBase(IPoolAddressesProvider(_addressProvider)) {
+        owner = payable(msg.sender);
+    }
+
+    modifier onlyOwner(){
+        require(msg.sender == owner, "Not owner");
+        _;
+    }
 
     function requestFlashLoan(address _token, uint256 _amount) public {
         address receiverAddress = address(this);
@@ -39,7 +47,7 @@ contract SimpleFlashLoan is FlashLoanSimpleReceiverBase {
         bytes calldata params
     ) external override returns (bool){
 
-        // Funded operation 
+        // Funded operation
 
         // Return funds
         uint256 totalAmount = amount + premium;
@@ -50,6 +58,11 @@ contract SimpleFlashLoan is FlashLoanSimpleReceiverBase {
         params = params;
 
         return true;
+    }
+
+    function withdraw(address _asset) public onlyOwner {
+        IERC20 asset = IERC20(_asset);
+        asset.transfer(msg.sender, asset.balanceOf(address(this)));
     }
 
     receive() external payable {} 

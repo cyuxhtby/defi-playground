@@ -2,28 +2,28 @@
 
 pragma solidity ^0.8.10;
 
-import {FlashLoanSimpleReceiverBase} from "@aave/core-v3/contracts/flashloan/base/FlashLoanSimpleReceiverBase.sol";
+import {FlashLoanReceiverBase} from "@aave/core-v3/contracts/flashloan/base/FlashLoanReceiverBase.sol";
 import {IPoolAddressesProvider} from "@aave/core-v3/contracts/interfaces/IPoolAddressesProvider.sol";
 import {IERC20} from "@aave/core-v3/contracts/dependencies/openzeppelin/contracts/IERC20.sol";
 import {IUniswapV2Router02} from "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
 
 
-contract FlashLoan is FlashLoanSimpleReceiverBase {
+contract FlashLoan is FlashLoanReceiverBase {
     address payable public owner; //owner if the contract
     
-    constructor(address _addressProvider) FlashLoanSimpleReceiverBase(IPoolAddressesProvider(_addressProvider)){
+    constructor(address _addressProvider) FlashLoanReceiverBase(IPoolAddressesProvider(_addressProvider)){
         owner = payable(msg.sender);
     }
     
     // initiator allows tracking where the loan request came from
     // params allows passing additional data or parameters to the executeOperation function 
     function executeOperation(
-        address asset,
-        uint256 amount, 
-        uint256 premium, 
+        address[] calldata assets,
+        uint256[] calldata amounts,
+        uint256[] calldata premiums,
         address initiator,
         bytes calldata params
-    ) external override returns (bool) {
+    ) external returns (bool) {
 
        //operation once loan is received 
         uint256 paramValue = abi.decode(params, (uint256));
@@ -51,24 +51,34 @@ contract FlashLoan is FlashLoanSimpleReceiverBase {
 
         // now return loan plus fee
        uint256 amountOwed = amounts3[1] + premium;
-       IERC20(asset).approve(address(POOL), amountOwed);
+       require(IERC20(asset).approve(address(POOL), amountOwed), "Token approval failed");
+       require(IERC20(asset).transfer(address(POOL), amountOwed), "Token transfer failed");
        return true;
     }
 
-    //function to request loan of specified amount
-    //referral code of zero, part of no campaign 
+    // function to request loan of specified amount
+    // modes passes in type of debt position to open if loan is not returned, pass in 0 for no debt
+    // onBehalfOf delegates the incurred debt if mode is not 0
+    // referral code of zero, part of no campaign 
     function requestFlashLoan(address _token, uint256 _amount) public onlyOwner {
         address receiverAddress = address(this);
-        address asset = _token;
-        uint256 amount =  _amount;
+        address[] memory assets = new address[](1);
+        assets[0] = _token;
+        uint256[] memory amounts = new uint256[](1);
+        amounts[0] = _amount;
+        uint256[] memory modes = new uint256[](1);
+        modes[0] = 0;
+        address onBehalfOf = address(this);
         bytes memory params = "";
         uint16 referralCode = 0;
     
         // call the aave lending pool contract and start loan
-        POOL.flashLoanSimple(
+        POOL.flashLoan(
             receiverAddress, 
-            asset,
-            amount,
+            assets,
+            amounts,
+            modes,
+            onBehalfOf,
             params,
             referralCode
         );

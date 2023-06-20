@@ -9,12 +9,36 @@ import {IUniswapV2Router02} from "@uniswap/v2-periphery/contracts/interfaces/IUn
 
 
 contract FlashLoan is FlashLoanReceiverBase {
-    address payable public owner; //owner if the contract
+    address payable public owner; 
+    address public uniswapRouter;
+    mapping(string => address) public tokens;
+
+    event TokenAddressSet(string tokenSymbol, address tokenAddress);
+    event Withdrawn(address tokenAddress, uint256 amount);
     
     constructor(address _addressProvider) FlashLoanReceiverBase(IPoolAddressesProvider(_addressProvider)){
         owner = payable(msg.sender);
     }
-    
+
+    modifier onlyOwner(){
+        require(msg.sender == owner, "You are not the owner");
+        // The underscore represents the body of the function you are modifying
+        _;
+    }
+
+    function setUniswapRouter(address _uniswapRouter) public onlyOwner {
+        uniswapRouter = _uniswapRouter;
+    }
+
+    function setTokenAddress(string memory _tokenSymbol, address _tokenAddress) external onlyOwner{
+        tokens[_tokenSymbol] = _tokenAddress;
+        emit TokenAddressSet(_tokenSymbol, _tokenAddress);
+    }
+
+    function removeTokenAddress(string memory _tokenSymbol) external onlyOwner {
+        delete tokens[_tokenSymbol];
+    }
+
     // initiator allows tracking where the loan request came from
     // params allows passing additional data or parameters to the executeOperation function 
     function executeOperation(
@@ -23,7 +47,11 @@ contract FlashLoan is FlashLoanReceiverBase {
         uint256[] calldata premiums,
         address initiator,
         bytes calldata params
-    ) external returns (bool) {
+    ) external override returns (bool) {
+
+        address asset = assets[0];
+        uint256 amount = amounts[0];
+        uint256 premium = premiums[0];
 
        //operation once loan is received 
         uint256 paramValue = abi.decode(params, (uint256));
@@ -31,23 +59,23 @@ contract FlashLoan is FlashLoanReceiverBase {
 
         IERC20(asset).transfer(initiator, amountToTransfer);
 
-        //swap USDC to DAI
+        //swap asset to DAI
         address[] memory path1 = new address[](2);
         path1[0] = asset;
-        path1[1] = 0x3B19a8FAa70D2db7BDd9a3ff4c4FD4B116b41D3F; //DAI address
-        uint[] memory amounts1 = IUniswapV2Router02(0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984).swapExactTokensForTokens(amountToTransfer, 0, path1, address(this), block.timestamp);
+        path1[1] = tokens["DAI"]; 
+        uint[] memory amounts1 = IUniswapV2Router02(uniswapRouter).swapExactTokensForTokens(amountToTransfer, 0, path1, address(this), block.timestamp);
 
         //swap DAI to Tether
         address[] memory path2 = new address[](2);
-        path2[0] = 0x3B19a8FAa70D2db7BDd9a3ff4c4FD4B116b41D3F; //DAI address
-        path2[1] = 0x509Ee0d083DdF8AC028f2a56731412edD63223B9; //Tether address
-        uint[] memory amounts2 = IUniswapV2Router02(0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984).swapExactTokensForTokens(amounts1[1], 0, path2, address(this), block.timestamp);
+        path2[0] = tokens["DAI"]; 
+        path2[1] = tokens["USDT"];
+        uint[] memory amounts2 = IUniswapV2Router02(uniswapRouter).swapExactTokensForTokens(amounts1[1], 0, path2, address(this), block.timestamp);
 
-        //swap Tether to USDC
+        //swap Tether to asset
         address[] memory path3 = new address[](2);
-        path3[0] = 0x509Ee0d083DdF8AC028f2a56731412edD63223B9; //Tether address
+        path3[0] = tokens["USDT"]; 
         path3[1] = asset;
-        uint[] memory amounts3 = IUniswapV2Router02(0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984).swapExactTokensForTokens(amounts2[1], 0, path3, address(this), block.timestamp);
+        uint[] memory amounts3 = IUniswapV2Router02(uniswapRouter).swapExactTokensForTokens(amounts2[1], 0, path3, address(this), block.timestamp);
 
         // now return loan plus fee
        uint256 amountOwed = amounts3[1] + premium;
@@ -91,21 +119,11 @@ contract FlashLoan is FlashLoanReceiverBase {
     function withdraw(address _tokenAddress) external onlyOwner {
         IERC20 token = IERC20(_tokenAddress);
         token.transfer(msg.sender, token.balanceOf(address(this)));
-    }
-
-    modifier onlyOwner(){
-        require(msg.sender == owner, "You are not the owner");
-        // The underscore represents the body of the function you are modifying
-        _;
+        emit Withdrawn(_tokenAddress, token.balanceOf(address(this)));
     }
 
     // fallback function to receive ETH payments
     // automatically called whenever the contract receives ETH that was not sent with a specific function call.
     receive() external payable {}
 
-
-
-
-
-
-}
+}   

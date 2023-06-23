@@ -2,15 +2,19 @@ import { HardhatUserConfig } from "hardhat/config";
 import "@nomiclabs/hardhat-ethers";
 import dotenv from "dotenv";
 
-dotenv.config();
+const result = dotenv.config();
+
+if (result.error) {
+  throw result.error;
+}
 
 const config: HardhatUserConfig = {
   solidity: "0.8.10",
   networks: {
     hardhat: {},
-    mainnet: {
-      url: "process.env.INFURA_URL",
-      accounts: []
+    sepolia: {
+      url: process.env.INFURA_URL, 
+      accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
     },
   },
 };

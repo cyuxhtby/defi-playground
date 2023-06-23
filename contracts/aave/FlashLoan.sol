@@ -15,6 +15,8 @@ contract FlashLoan is FlashLoanReceiverBase {
 
     event TokenAddressSet(string tokenSymbol, address tokenAddress);
     event Withdrawn(address tokenAddress, uint256 amount);
+    event BalanceUpdate(string tokenSymbol, address tokenAddress, uint256 balance);
+
     
     constructor(address _addressProvider) FlashLoanReceiverBase(IPoolAddressesProvider(_addressProvider)){
         owner = payable(msg.sender);
@@ -59,11 +61,17 @@ contract FlashLoan is FlashLoanReceiverBase {
 
         IERC20(asset).transfer(initiator, amountToTransfer);
 
+        // Log balance before swap
+        emit BalanceUpdate("Asset", asset, IERC20(asset).balanceOf(address(this)));
+
         //swap asset to DAI
         address[] memory path1 = new address[](2);
         path1[0] = asset;
         path1[1] = tokens["DAI"]; 
         uint[] memory amounts1 = IUniswapV2Router02(uniswapRouter).swapExactTokensForTokens(amountToTransfer, 0, path1, address(this), block.timestamp);
+
+        // Log balance after swap to DAI
+        emit BalanceUpdate("DAI", tokens["DAI"], IERC20(tokens["DAI"]).balanceOf(address(this)));
 
         //swap DAI to Tether
         address[] memory path2 = new address[](2);
@@ -71,11 +79,17 @@ contract FlashLoan is FlashLoanReceiverBase {
         path2[1] = tokens["USDT"];
         uint[] memory amounts2 = IUniswapV2Router02(uniswapRouter).swapExactTokensForTokens(amounts1[1], 0, path2, address(this), block.timestamp);
 
+        // Log balance after swap to Tether
+        emit BalanceUpdate("USDT", tokens["USDT"], IERC20(tokens["USDT"]).balanceOf(address(this)));
+
         //swap Tether to asset
         address[] memory path3 = new address[](2);
         path3[0] = tokens["USDT"]; 
         path3[1] = asset;
         uint[] memory amounts3 = IUniswapV2Router02(uniswapRouter).swapExactTokensForTokens(amounts2[1], 0, path3, address(this), block.timestamp);
+
+        // Log balance after swap back to asset
+        emit BalanceUpdate("Asset", asset, IERC20(asset).balanceOf(address(this)));
 
         // now return loan plus fee
        uint256 amountOwed = amounts3[1] + premium;

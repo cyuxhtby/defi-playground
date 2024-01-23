@@ -10,10 +10,12 @@
     "mocha": "^10.2.0"
   },
   "dependencies": {
-    "@aave/core-v3": "^1.17.2",
+    "@aave/core-v3": "^1.18.0",
     "@openzeppelin/contracts": "^4.8.2",
     "@uniswap/v2-periphery": "^1.1.0-beta.0",
+    "@uniswap/v3-periphery": "^1.4.4",
     "comet": "github:compound-finance/comet",
-    "dotenv": "^16.0.3"
+    "dotenv": "^16.0.3",
+    "hardhat-etherscan": "^1.0.1"
   }
 }
